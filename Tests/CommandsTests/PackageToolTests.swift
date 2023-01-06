@@ -536,6 +536,32 @@ final class PackageToolTests: CommandsTestCase {
         }
     }
 
+    func testDumpClangSymbolGraph() throws {
+        try XCTSkipIf((try? UserToolchain.default.getSymbolGraphExtract()) == nil, "skipping test because the `swift-symbolgraph-extract` tools isn't available")
+
+        try fixture(name: "CFamilyTargets/ModuleMapGenerationCases") { fixturePath in
+            try executeSwiftPackage(fixturePath, extraArgs: ["dump-symbol-graph"])
+
+            let symbolGraphPath = fixturePath.appending(
+                components: ".build", try UserToolchain.default.targetTriple.platformBuildPathComponent, "symbolgraph", "clang"
+            )
+
+            let symbolGraphDirectoryContents = try localFileSystem.getDirectoryContents(symbolGraphPath)
+
+            XCTAssertEqual(
+                Set(symbolGraphDirectoryContents),
+                [
+                    "FlatInclude.symbols.json",
+                    "NonModuleDirectoryInclude.symbols.json",
+                    "UmbrellaDirectoryInclude.symbols.json",
+                    "UmbrellaHeader.symbols.json",
+                    "UmbrellaHeaderFlat.symbols.json",
+                ],
+                "Failed to find the expected clang symbol graph files."
+            )
+        }
+    }
+
     func testShowDependencies() throws {
         try fixture(name: "DependencyResolution/External/Complex") { fixturePath in
             let packageRoot = fixturePath.appending("app")
@@ -2196,6 +2222,9 @@ final class PackageToolTests: CommandsTestCase {
                         .target(
                             name: "MyLibrary"
                         ),
+                        .target(
+                            name: "ClangTarget"
+                        ),
                         .executableTarget(
                             name: "MyCommand",
                             dependencies: ["MyLibrary"]
@@ -2225,6 +2254,29 @@ final class PackageToolTests: CommandsTestCase {
                 string: """
                 import MyLibrary
                 print("\\(GetGreeting()), World!")
+                """
+            )
+
+            let clangPath = packageDir.appending(components: "Sources", "ClangTarget")
+            try localFileSystem.createDirectory(clangPath, recursive: true)
+            let clangIncludePath = clangPath.appending(components: "include")
+            try localFileSystem.createDirectory(clangIncludePath, recursive: true)
+
+            try localFileSystem.writeFileContents(
+                clangIncludePath.appending(components: "ClangTarget.h"),
+                string: """
+                int foo();
+                """
+            )
+
+            try localFileSystem.writeFileContents(
+                clangPath.appending(components: "ClangTarget.c"),
+                string: """
+                #include "ClangTarget.h"
+
+                int foo() {
+                    return 5;
+                }
                 """
             )
 
@@ -2263,7 +2315,7 @@ final class PackageToolTests: CommandsTestCase {
                 let (stdout, _) = try SwiftPM.Package.execute(["generate-documentation"], packagePath: packageDir)
                 XCTAssertMatch(stdout, .and(.contains("MyLibrary:"), .contains("mypackage/MyLibrary")))
                 XCTAssertMatch(stdout, .and(.contains("MyCommand:"), .contains("mypackage/MyCommand")))
-
+                XCTAssertMatch(stdout, .and(.contains("ClangTarget:"), .contains("mypackage/ClangTarget")))
             }
 
             // Check that if we pass a target, we successfully get symbol graph information for just the target we asked for.
@@ -2271,6 +2323,7 @@ final class PackageToolTests: CommandsTestCase {
                 let (stdout, _) = try SwiftPM.Package.execute(["generate-documentation", "--target", "MyLibrary"], packagePath: packageDir)
                 XCTAssertMatch(stdout, .and(.contains("MyLibrary:"), .contains("mypackage/MyLibrary")))
                 XCTAssertNoMatch(stdout, .and(.contains("MyCommand:"), .contains("mypackage/MyCommand")))
+                XCTAssertNoMatch(stdout, .and(.contains("ClangTarget:"), .contains("mypackage/ClangTarget")))
             }
         }
     }
