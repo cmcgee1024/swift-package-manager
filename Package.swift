@@ -828,6 +828,12 @@ let package = Package(
             name: "package-info",
             dependencies: ["Workspace"],
             path: "Examples/package-info/Sources/package-info"
+        ),
+        // Documentation target
+        .target(
+            name: "SwiftPMDocs",
+            path: "Documentation",
+            excludes: "*.md"
         )
     ],
     swiftLanguageVersions: [.v5]
@@ -954,6 +960,7 @@ if ProcessInfo.processInfo.environment["SWIFTCI_USE_LOCAL_DEPS"] == nil {
         .package(url: "https://github.com/apple/swift-collections.git", "1.0.1" ..< "1.2.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", "1.0.1" ..< "1.6.0"),
         .package(url: "https://github.com/swiftlang/swift-toolchain-sqlite.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.4.0"),
     ]
 } else {
     package.dependencies += [
